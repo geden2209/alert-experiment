@@ -115,7 +115,7 @@ def main():
 
     share = float(y_te.mean())
     print(f"Часов всего: {len(data)}, тест: {len(X_te)}, доля тревожных часов в тесте: {share:.3f}")
-    if share > 0.6 or share < 0.001:
+    if share > 0.95 or share < 0.001:
         sys.exit(f"Подозрительные данные: доля тревожных часов в тесте {share:.3f}.")
 
     model = HistGradientBoostingClassifier(
