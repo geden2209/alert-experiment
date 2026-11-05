@@ -21,11 +21,16 @@ NEIGHBORS = [
     "Khersonska oblast",
 ]
 TEST_SHARE = 0.2
+# Какие уровни тревог считать. Громадские тревоги на востоке почти не прекращаются,
+# поэтому в ряд берём только область и районы.
+LEVELS = ["oblast", "raion"]
 
 
 def active_series(df, index):
     """1, если в этот час шла хоть одна тревога (любого уровня) в df."""
     n = len(index)
+    if len(df) == 0:
+        return np.zeros(n, dtype=int)
     start = ((df["started_at"].dt.floor("h") - index[0]) // pd.Timedelta("1h")).to_numpy()
     end = ((df["finished_at"].dt.floor("h") - index[0]) // pd.Timedelta("1h")).to_numpy()
     start = np.clip(start, 0, n - 1)
@@ -55,6 +60,15 @@ def main():
         df["started_at"].min().floor("h"), last_known.floor("h"), freq="h", tz="UTC"
     )
 
+    # Диагностика: доля тревожных часов по уровням и годам для нашей области
+    own = df[df["oblast"] == OBLAST]
+    print("Доля тревожных часов по уровням и годам:")
+    for level in sorted(df["level"].dropna().unique()):
+        ser = pd.Series(active_series(own[own["level"] == level], index), index=index)
+        by_year = ser.groupby(ser.index.year).mean().round(3)
+        print(f"  {level}:", " ".join(f"{y}={v}" for y, v in by_year.items()))
+
+    df = df[df["level"].isin(LEVELS)]
     by_oblast = {name: active_series(g, index) for name, g in df.groupby("oblast")}
     if OBLAST not in by_oblast:
         raise SystemExit(f"Нет области {OBLAST}. Есть: {sorted(by_oblast)}")
@@ -75,7 +89,7 @@ def main():
     print(s.groupby(s.index.year).mean().round(3).to_string())
     X = pd.DataFrame(index=index)
     X["hour"] = index.hour
-    X["dow"] = index.dayofweek
+    X["dow"] = index.day_of_week
     X["month"] = index.month
     X["now"] = s
     for lag in (1, 2, 3):
