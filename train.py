@@ -1,5 +1,6 @@
 import html
 import os
+import sys
 from datetime import datetime, timezone
 
 import numpy as np
@@ -9,7 +10,10 @@ from sklearn.inspection import permutation_importance
 from sklearn.metrics import average_precision_score, roc_auc_score
 
 CSV = "data/official_data_en.csv"
-OBLAST = "Dnipropetrovska oblast"
+OBLAST = os.environ.get("OBLAST", "Dnipropetrovska oblast")
+# Район, который прогнозируем (в нём находится город Днепр).
+# Область целиком почти всегда "в тревоге" хотя бы в одном районе, поэтому берём один район.
+RAION = os.environ.get("RAION", "Dniprovskyi raion")
 # Соседние области (названия как в датасете; отсутствующие пропускаются)
 NEIGHBORS = [
     "Zaporizka oblast",
@@ -20,14 +24,13 @@ NEIGHBORS = [
     "Mykolaivska oblast",
     "Khersonska oblast",
 ]
-TEST_SHARE = 0.2
-# Какие уровни тревог считать. Громадские тревоги на востоке почти не прекращаются,
-# поэтому в ряд берём только область и районы.
+# Для признаков по другим областям берём только эти уровни
 LEVELS = ["oblast", "raion"]
+TEST_SHARE = 0.2
 
 
 def active_series(df, index):
-    """1, если в этот час шла хоть одна тревога (любого уровня) в df."""
+    """1, если в этот час шла хоть одна тревога из df."""
     n = len(index)
     if len(df) == 0:
         return np.zeros(n, dtype=int)
@@ -60,33 +63,38 @@ def main():
         df["started_at"].min().floor("h"), last_known.floor("h"), freq="h", tz="UTC"
     )
 
-    # Диагностика: доля тревожных часов по уровням и годам для нашей области
     own = df[df["oblast"] == OBLAST]
-    print("Доля тревожных часов по уровням и годам:")
-    for level in sorted(df["level"].dropna().unique()):
-        ser = pd.Series(active_series(own[own["level"] == level], index), index=index)
-        by_year = ser.groupby(ser.index.year).mean().round(3)
-        print(f"  {level}:", " ".join(f"{y}={v}" for y, v in by_year.items()))
+    own_raion = own[own["level"] == "raion"]
 
-    df = df[df["level"].isin(LEVELS)]
-    by_oblast = {name: active_series(g, index) for name, g in df.groupby("oblast")}
-    if OBLAST not in by_oblast:
-        raise SystemExit(f"Нет области {OBLAST}. Есть: {sorted(by_oblast)}")
+    # Начало "районной эры": первая районная тревога после 2024-01-01
+    later = own_raion[own_raion["started_at"] >= pd.Timestamp("2024-01-01", tz="UTC")]
+    era_start = later["started_at"].min().floor("h") if len(later) else index[0]
+    print("Районные тревоги в области начались:", era_start)
 
+    raion_series = {
+        r: active_series(own_raion[own_raion["raion"] == r], index)
+        for r in sorted(own_raion["raion"].dropna().unique())
+    }
+    pos = index >= era_start
+    print("Доля тревожных часов по районам с начала районной эры:")
+    for r, a in raion_series.items():
+        print(f"  {r}: {a[pos].mean():.3f}")
+    if RAION not in raion_series:
+        sys.exit(f"Нет района {RAION}. Есть: {sorted(raion_series)}")
+
+    oblast_level = active_series(own[own["level"] == "oblast"], index)
+    target_active = np.maximum(oblast_level, raion_series[RAION])
+    other_raions = sum(a for r, a in raion_series.items() if r != RAION)
+
+    # Остальные области (только область и районы)
+    df_levels = df[df["level"].isin(LEVELS)]
+    by_oblast = {name: active_series(g, index) for name, g in df_levels.groupby("oblast")}
     missing = [n for n in NEIGHBORS if n not in by_oblast]
     if missing:
         print("Нет соседей в данных:", missing)
     neighbors = [n for n in NEIGHBORS if n in by_oblast]
 
-    s = pd.Series(by_oblast[OBLAST], index=index)
-
-    # Диагностика
-    mine = df[df["oblast"] == OBLAST].copy()
-    mine["hours"] = (mine["finished_at"] - mine["started_at"]).dt.total_seconds() / 3600
-    print("Самые длинные тревоги по области:")
-    print(mine.sort_values("hours", ascending=False).head(5)[["level", "started_at", "finished_at", "hours"]].to_string())
-    print("Доля тревожных часов по годам:")
-    print(s.groupby(s.index.year).mean().round(3).to_string())
+    s = pd.Series(target_active, index=index)
     X = pd.DataFrame(index=index)
     X["hour"] = index.hour
     X["dow"] = index.day_of_week
@@ -101,6 +109,7 @@ def main():
     last = np.maximum.accumulate(np.where(s.to_numpy() == 1, idx, -1))
     X["hours_since"] = np.minimum(np.where(last >= 0, idx - last, 168), 168)
 
+    X["other_raions_now"] = other_raions
     X["neigh_now"] = sum(by_oblast[n] for n in neighbors) if neighbors else 0
     X["national_now"] = sum(by_oblast.values())
 
@@ -108,15 +117,24 @@ def main():
     live_row = X.iloc[[-1]]  # прогноз на час после последней записи датасета
     data = X.iloc[:-1].copy()
     target = y.iloc[:-1].astype(int)
+    base_yday_all = s.shift(23).iloc[:-1].fillna(0)
+
+    # Обучаемся только на периоде, где определение тревоги единое
+    keep = data.index >= era_start
+    data, target, base_yday_all = data[keep], target[keep], base_yday_all[keep]
+    if len(data) < 1000:
+        sys.exit(f"Слишком мало данных после {era_start}: {len(data)} часов")
 
     split = int(len(data) * (1 - TEST_SHARE))
     X_tr, X_te = data.iloc[:split], data.iloc[split:]
     y_tr, y_te = target.iloc[:split], target.iloc[split:]
 
     share = float(y_te.mean())
+    print(f"Часов всего: {len(data)}, тест: {len(X_te)}, доля тревожных часов в тесте: {share:.3f}")
     if share > 0.6 or share < 0.001:
-        raise SystemExit(
-            f"Подозрительные данные: доля тревожных часов в тесте {share:.3f}. Смотрите диагностику выше."
+        sys.exit(
+            f"Подозрительные данные: доля тревожных часов в тесте {share:.3f}. "
+            "Выберите другой район (переменная RAION), список выше."
         )
 
     model = HistGradientBoostingClassifier(
@@ -126,7 +144,7 @@ def main():
     p_te = model.predict_proba(X_te)[:, 1]
 
     base_now = X_te["now"].to_numpy()
-    base_yday = s.shift(23).iloc[:-1].iloc[split:].fillna(0).to_numpy()
+    base_yday = base_yday_all.iloc[split:].to_numpy()
 
     def metrics(score):
         return roc_auc_score(y_te, score), average_precision_score(y_te, score)
@@ -154,7 +172,6 @@ def main():
         else ""
     )
 
-    print(f"Строк: {len(data)}, тест: {len(X_te)}, доля тревожных часов в тесте: {share:.3f}")
     for name, auc, ap in rows:
         print(f"{name}: ROC-AUC={auc:.3f}, PR-AUC={ap:.3f}")
     print("Вероятность на следующий час после конца данных:", round(prob, 3))
@@ -167,6 +184,7 @@ def main():
     imp_rows = "".join(
         f"<tr><td>{html.escape(n)}</td><td>{v:.4f}</td></tr>" for n, v in importance[:8]
     )
+    era_txt = era_start.strftime("%Y-%m-%d")
     page = f"""<!doctype html>
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -181,14 +199,14 @@ h1{{font-size:20px}} h2{{font-size:16px;margin-top:24px}}
 table{{border-collapse:collapse;width:100%;font-size:14px}}
 td,th{{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}}
 </style></head><body>
-<h1>{html.escape(OBLAST)}</h1>
+<h1>{html.escape(RAION)}, {html.escape(OBLAST)}</h1>
 {stale}
 <div class="big">{prob*100:.0f}%</div>
 <div class="mut">вероятность тревоги в час после последней записи датасета ({data_end}).
 Это эксперимент, а не оповещение. Страница обновлена {now_utc}.</div>
 <h2>Качество на тесте (последние {int(TEST_SHARE*100)}% времени)</h2>
 <table><tr><th>Модель</th><th>ROC-AUC</th><th>PR-AUC</th></tr>{table}</table>
-<div class="mut">Доля тревожных часов в тесте: {share:.1%}.</div>
+<div class="mut">Доля тревожных часов в тесте: {share:.1%}. Обучение на данных с {era_txt}.</div>
 <h2>Важность признаков</h2>
 <table>{imp_rows}</table>
 </body></html>"""
