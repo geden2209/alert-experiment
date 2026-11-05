@@ -4,35 +4,52 @@ import sys
 import requests
 
 REPO = "Vadimkin/ukrainian-air-raid-sirens-dataset"
-PATH = "datasets/official_data_en.csv"
 BRANCHES = ["main", "master"]
-OUT = "data/official_data_en.csv"
+FILES = {
+    "official_data_en.csv": True,    # обязательный
+    "volunteer_data_en.csv": False,  # необязательный, смотрим что внутри
+}
 
 
-def download():
-    last_error = ""
+def download(name):
+    errors = []
     for branch in BRANCHES:
-        url = f"https://raw.githubusercontent.com/{REPO}/{branch}/{PATH}"
-        resp = requests.get(url, timeout=60)
+        url = f"https://raw.githubusercontent.com/{REPO}/{branch}/datasets/{name}"
+        try:
+            resp = requests.get(url, timeout=60)
+        except requests.RequestException as exc:
+            errors.append(f"{url} -> {exc}")
+            continue
         if resp.status_code == 200:
             return url, resp.content
-        last_error = f"{url} -> HTTP {resp.status_code}"
-    sys.exit("Не удалось скачать файл: " + last_error)
+        errors.append(f"{url} -> HTTP {resp.status_code}")
+    return None, "\n".join(errors)
 
 
 def main():
-    url, content = download()
-
     os.makedirs("data", exist_ok=True)
-    with open(OUT, "wb") as f:
-        f.write(content)
+    for name, required in FILES.items():
+        url, content = download(name)
+        print(f"=== {name} ===")
+        if url is None:
+            print("Не удалось скачать:\n" + content)
+            if required:
+                sys.exit(1)
+            continue
 
-    lines = content.decode("utf-8", errors="replace").splitlines()
-    print("Источник:", url)
-    print("Строк в файле:", len(lines))
-    print("Колонки:", lines[0] if lines else "(пусто)")
-    for line in lines[1:4]:
-        print(line)
+        with open(f"data/{name}", "wb") as f:
+            f.write(content)
+
+        lines = content.decode("utf-8", errors="replace").splitlines()
+        print("Источник:", url)
+        print("Строк в файле:", len(lines))
+        print("Колонки:", lines[0] if lines else "(пусто)")
+        print("Первые строки:")
+        for line in lines[1:4]:
+            print("  ", line)
+        print("Последние строки:")
+        for line in lines[-3:]:
+            print("  ", line)
 
 
 if __name__ == "__main__":
