@@ -1,19 +1,19 @@
-name: Collect alerts
+name: Update dataset
 
 on:
   schedule:
-    - cron: "7 * * * *"   # каждый час, на 7-й минуте
+    - cron: "17 3 * * *"   # раз в сутки
   workflow_dispatch:       # ручной запуск кнопкой
 
 permissions:
   contents: write
 
 concurrency:
-  group: collect-alerts
+  group: update-dataset
   cancel-in-progress: false
 
 jobs:
-  collect:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -26,17 +26,14 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-      - name: Fetch alerts
-        env:
-          ALERTS_TOKEN: ${{ secrets.ALERTS_TOKEN }}
-          OBLAST: "Дніпропетровська область"
+      - name: Download dataset
         run: python fetch.py
 
       - name: Commit data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/snapshots.csv
-          git diff --staged --quiet || git commit -m "Update snapshots"
+          git add data/
+          git diff --staged --quiet || git commit -m "Update dataset"
           git pull --rebase
           git push
