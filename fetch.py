@@ -1,66 +1,38 @@
-import csv
 import os
 import sys
-from datetime import datetime, timezone
 
 import requests
 
-TOKEN = os.environ.get("ALERTS_TOKEN")
-# Название области точно как в API, например: "Дніпропетровська область", "м. Київ"
-OBLAST = os.environ.get("OBLAST", "Дніпропетровська область")
+REPO = "Vadimkin/ukrainian-air-raid-sirens-dataset"
+PATH = "datasets/official_data_en.csv"
+BRANCHES = ["main", "master"]
+OUT = "data/official_data_en.csv"
 
-URL = "https://api.alerts.in.ua/v1/alerts/active.json"
-OUT = "data/snapshots.csv"
-HEADER = [
-    "timestamp_utc",
-    "oblast",
-    "air_raid_in_oblast",
-    "alerts_in_oblast",
-    "alerts_total",
-    "oblasts_with_air_raid",
-]
+
+def download():
+    last_error = ""
+    for branch in BRANCHES:
+        url = f"https://raw.githubusercontent.com/{REPO}/{branch}/{PATH}"
+        resp = requests.get(url, timeout=60)
+        if resp.status_code == 200:
+            return url, resp.content
+        last_error = f"{url} -> HTTP {resp.status_code}"
+    sys.exit("Не удалось скачать файл: " + last_error)
 
 
 def main():
-    if not TOKEN:
-        sys.exit("Не задан секрет ALERTS_TOKEN")
-
-    resp = requests.get(
-        URL,
-        headers={"Authorization": f"Bearer {TOKEN}"},
-        timeout=30,
-    )
-    resp.raise_for_status()
-    alerts = resp.json().get("alerts", [])
-
-    in_oblast = [a for a in alerts if a.get("location_oblast") == OBLAST]
-    air_in_oblast = [a for a in in_oblast if a.get("alert_type") == "air_raid"]
-    air_oblasts = sorted(
-        {
-            a.get("location_oblast", "")
-            for a in alerts
-            if a.get("alert_type") == "air_raid"
-        }
-    )
-
-    row = [
-        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        OBLAST,
-        1 if air_in_oblast else 0,
-        len(in_oblast),
-        len(alerts),
-        ";".join(air_oblasts),
-    ]
+    url, content = download()
 
     os.makedirs("data", exist_ok=True)
-    is_new = not os.path.exists(OUT)
-    with open(OUT, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if is_new:
-            writer.writerow(HEADER)
-        writer.writerow(row)
+    with open(OUT, "wb") as f:
+        f.write(content)
 
-    print("Записано:", row)
+    lines = content.decode("utf-8", errors="replace").splitlines()
+    print("Источник:", url)
+    print("Строк в файле:", len(lines))
+    print("Колонки:", lines[0] if lines else "(пусто)")
+    for line in lines[1:4]:
+        print(line)
 
 
 if __name__ == "__main__":
