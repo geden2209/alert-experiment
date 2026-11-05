@@ -38,10 +38,18 @@ def active_series(df, index):
 
 def main():
     df = pd.read_csv(CSV)
-    df["started_at"] = pd.to_datetime(df["started_at"], utc=True)
-    df["finished_at"] = pd.to_datetime(df["finished_at"], utc=True)
+    df["started_at"] = pd.to_datetime(df["started_at"], utc=True, format="ISO8601")
+    df["finished_at"] = pd.to_datetime(df["finished_at"], utc=True, format="ISO8601")
     last_known = max(df["started_at"].max(), df["finished_at"].max())
+
+    # Тревоги без времени окончания: недавние считаем идущими, старые - 30 минут
+    no_end = df["finished_at"].isna()
+    recent = df["started_at"] > last_known - pd.Timedelta("3h")
+    print("Строк без finished_at:", int(no_end.sum()), "из них старых:", int((no_end & ~recent).sum()))
+    old_no_end = no_end & ~recent
+    df.loc[old_no_end, "finished_at"] = df.loc[old_no_end, "started_at"] + pd.Timedelta("30min")
     df["finished_at"] = df["finished_at"].fillna(last_known)
+    df = df[df["finished_at"] >= df["started_at"]]
 
     index = pd.date_range(
         df["started_at"].min().floor("h"), last_known.floor("h"), freq="h", tz="UTC"
@@ -57,6 +65,14 @@ def main():
     neighbors = [n for n in NEIGHBORS if n in by_oblast]
 
     s = pd.Series(by_oblast[OBLAST], index=index)
+
+    # Диагностика
+    mine = df[df["oblast"] == OBLAST].copy()
+    mine["hours"] = (mine["finished_at"] - mine["started_at"]).dt.total_seconds() / 3600
+    print("Самые длинные тревоги по области:")
+    print(mine.sort_values("hours", ascending=False).head(5)[["level", "started_at", "finished_at", "hours"]].to_string())
+    print("Доля тревожных часов по годам:")
+    print(s.groupby(s.index.year).mean().round(3).to_string())
     X = pd.DataFrame(index=index)
     X["hour"] = index.hour
     X["dow"] = index.dayofweek
@@ -83,6 +99,12 @@ def main():
     X_tr, X_te = data.iloc[:split], data.iloc[split:]
     y_tr, y_te = target.iloc[:split], target.iloc[split:]
 
+    share = float(y_te.mean())
+    if share > 0.6 or share < 0.001:
+        raise SystemExit(
+            f"Подозрительные данные: доля тревожных часов в тесте {share:.3f}. Смотрите диагностику выше."
+        )
+
     model = HistGradientBoostingClassifier(
         max_iter=300, learning_rate=0.05, max_leaf_nodes=31, random_state=42
     )
@@ -100,7 +122,6 @@ def main():
         ("База: как сейчас", *metrics(base_now)),
         ("База: как вчера в это время", *metrics(base_yday)),
     ]
-    share = float(y_te.mean())
 
     imp = permutation_importance(
         model, X_te, y_te, scoring="average_precision", n_repeats=3, random_state=42
@@ -109,7 +130,15 @@ def main():
 
     prob = float(model.predict_proba(live_row)[0, 1])
     data_end = index[-1].strftime("%Y-%m-%d %H:%M UTC")
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now_dt = datetime.now(timezone.utc)
+    now_utc = now_dt.strftime("%Y-%m-%d %H:%M UTC")
+    stale_days = (now_dt - index[-1].to_pydatetime()).days
+    stale = (
+        f'<div class="warn">Данные в датасете закончились {stale_days} дн. назад. '
+        "Прогноз относится к тому моменту, а не к текущему.</div>"
+        if stale_days >= 3
+        else ""
+    )
 
     print(f"Строк: {len(data)}, тест: {len(X_te)}, доля тревожных часов в тесте: {share:.3f}")
     for name, auc, ap in rows:
@@ -134,10 +163,12 @@ def main():
 body{{font-family:system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px;max-width:560px}}
 h1{{font-size:20px}} h2{{font-size:16px;margin-top:24px}}
 .big{{font-size:44px;font-weight:700}} .mut{{color:var(--mut);font-size:13px}}
+.warn{{border:1px solid #c80;border-radius:8px;padding:8px;margin:8px 0;font-size:13px}}
 table{{border-collapse:collapse;width:100%;font-size:14px}}
 td,th{{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}}
 </style></head><body>
 <h1>{html.escape(OBLAST)}</h1>
+{stale}
 <div class="big">{prob*100:.0f}%</div>
 <div class="mut">вероятность тревоги в час после последней записи датасета ({data_end}).
 Это эксперимент, а не оповещение. Страница обновлена {now_utc}.</div>
