@@ -2,7 +2,7 @@ name: Update dataset and model
 
 on:
   schedule:
-    - cron: "17 3 * * *"   # раз в сутки
+    - cron: "7 * * * *"    # каждый час
   workflow_dispatch:       # ручной запуск кнопкой
 
 permissions:
@@ -32,11 +32,11 @@ jobs:
       - name: Train model and build page
         run: python train.py
 
-      - name: Commit results
+      - name: Commit page
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/ docs/
-          git diff --staged --quiet || git commit -m "Update dataset and page"
+          git add docs/
+          git diff --staged --quiet || git commit -m "Update page"
           git pull --rebase
           git push
