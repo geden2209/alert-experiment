@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Эксперимент: тревоги</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#111;--mut:#666;--line:#ddd}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--mut:#999;--line:#333}}
+body{font-family:system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:16px;max-width:560px}
+h1{font-size:20px} h2{font-size:16px;margin-top:24px}
+.big{font-size:44px;font-weight:700} .mut{color:var(--mut);font-size:13px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+</style></head><body>
+<h1>Dnipropetrovska oblast</h1>
+<div class="big">100%</div>
+<div class="mut">вероятность тревоги в час после последней записи датасета (2026-09-07 05:00 UTC).
+Это эксперимент, а не оповещение. Страница обновлена 2026-11-05 07:49 UTC.</div>
+<h2>Качество на тесте (последние 20% времени)</h2>
+<table><tr><th>Модель</th><th>ROC-AUC</th><th>PR-AUC</th></tr><tr><td>Бустинг</td><td>0.849</td><td>1.000</td></tr><tr><td>База: как сейчас</td><td>0.500</td><td>1.000</td></tr><tr><td>База: как вчера в это время</td><td>0.500</td><td>1.000</td></tr></table>
+<div class="mut">Доля тревожных часов в тесте: 100.0%.</div>
+<h2>Важность признаков</h2>
+<table><tr><td>national_now</td><td>0.0001</td></tr><tr><td>month</td><td>0.0000</td></tr><tr><td>hour</td><td>0.0000</td></tr><tr><td>dow</td><td>0.0000</td></tr><tr><td>sum24h</td><td>0.0000</td></tr><tr><td>sum3h</td><td>0.0000</td></tr><tr><td>sum168h</td><td>0.0000</td></tr><tr><td>now</td><td>0.0000</td></tr></table>
+</body></html>
