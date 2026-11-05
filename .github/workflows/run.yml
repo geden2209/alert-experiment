@@ -1,4 +1,4 @@
-name: Update dataset
+name: Update dataset and model
 
 on:
   schedule:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -24,16 +24,19 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests pandas numpy scikit-learn
 
       - name: Download dataset
         run: python fetch.py
 
-      - name: Commit data
+      - name: Train model and build page
+        run: python train.py
+
+      - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git diff --staged --quiet || git commit -m "Update dataset"
+          git add data/ docs/
+          git diff --staged --quiet || git commit -m "Update dataset and page"
           git pull --rebase
           git push
