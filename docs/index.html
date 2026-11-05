@@ -12,14 +12,18 @@ h1{font-size:20px} h2{font-size:16px;margin-top:24px}
 table{border-collapse:collapse;width:100%;font-size:14px}
 td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
 </style></head><body>
-<h1>Dniprovskyi raion, Dnipropetrovska oblast</h1>
-<div class="warn">Данные в датасете закончились 59 дн. назад. Прогноз относится к тому моменту, а не к текущему.</div>
-<div class="big">59%</div>
-<div class="mut">вероятность тревоги в час после последней записи датасета (2026-09-07 05:00 UTC).
-Это эксперимент, а не оповещение. Страница обновлена 2026-11-05 08:35 UTC.</div>
-<h2>Качество на тесте (последние 20% времени)</h2>
-<table><tr><th>Модель</th><th>ROC-AUC</th><th>PR-AUC</th></tr><tr><td>Бустинг</td><td>0.761</td><td>0.658</td></tr><tr><td>База: как сейчас</td><td>0.731</td><td>0.598</td></tr><tr><td>База: как вчера в это время</td><td>0.519</td><td>0.423</td></tr></table>
-<div class="mut">Доля тревожных часов в тесте: 41.3%. Обучение на данных с 2024-01-26.</div>
+<h1>Dnipropetrovska oblast</h1>
+
+<div class="big">66%</div>
+<div class="mut">вероятность тревоги в час после последней записи датасета (2026-11-05 05:00 UTC).
+Это эксперимент, а не оповещение. Страница обновлена 2026-11-05 08:56 UTC.
+Источник: волонтёрские данные, только уровень области.</div>
+<h2>Качество на тесте, все часы</h2>
+<table><tr><th>Модель</th><th>ROC-AUC</th><th>PR-AUC</th></tr><tr><td>Бустинг</td><td>0.596</td><td>0.686</td></tr><tr><td>База: как сейчас</td><td>0.579</td><td>0.665</td></tr><tr><td>База: как вчера в это время</td><td>0.528</td><td>0.637</td></tr></table>
+<div class="mut">Тест: последние 20% времени. Тревожных часов: 62.4%.</div>
+<h2>Если тревоги сейчас нет</h2>
+<table><tr><th>Модель</th><th>ROC-AUC</th><th>PR-AUC</th></tr><tr><td>Бустинг</td><td>0.608</td><td>0.625</td></tr><tr><td>База: как вчера в это время</td><td>0.518</td><td>0.535</td></tr><tr><td>База: число соседей в тревоге</td><td>0.588</td><td>0.597</td></tr></table>
+<div class="mut">Новая тревога начинается в 52.5% таких часов.</div>
 <h2>Важность признаков</h2>
-<table><tr><td>now</td><td>0.2010</td></tr><tr><td>hour</td><td>0.0095</td></tr><tr><td>other_raions_now</td><td>0.0060</td></tr><tr><td>lag1</td><td>0.0050</td></tr><tr><td>national_now</td><td>0.0036</td></tr><tr><td>sum168h</td><td>0.0035</td></tr><tr><td>sum6h</td><td>0.0030</td></tr><tr><td>sum3h</td><td>0.0022</td></tr></table>
+<table><tr><td>now</td><td>0.0469</td></tr><tr><td>hour</td><td>0.0124</td></tr><tr><td>sum168h</td><td>0.0111</td></tr><tr><td>neigh_now</td><td>0.0057</td></tr><tr><td>sum24h</td><td>0.0037</td></tr><tr><td>n_Kharkivska</td><td>0.0035</td></tr><tr><td>n_Poltavska</td><td>0.0030</td></tr><tr><td>n_Zaporizka</td><td>0.0019</td></tr></table>
 </body></html>
